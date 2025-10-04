@@ -164,6 +164,22 @@ class ArchiveDatabase:
             if isinstance(collection, list):
                 collection = "; ".join(collection)
 
+            description = metadata.get("description", "")
+            if isinstance(description, list):
+                description = " ".join(description)
+
+            language = metadata.get("language", "")
+            if isinstance(language, list):
+                language = "; ".join(language)
+
+            publisher = metadata.get("publisher", "")
+            if isinstance(publisher, list):
+                publisher = "; ".join(publisher)
+
+            date = metadata.get("date", "")
+            if isinstance(date, list):
+                date = "; ".join(date)
+
             year = metadata.get("year")
             if year:
                 try:
@@ -181,13 +197,13 @@ class ArchiveDatabase:
                 identifier,
                 title,
                 creator,
-                metadata.get("publisher", ""),
-                metadata.get("date", ""),
+                publisher,
+                date,
                 year,
-                metadata.get("language", ""),
+                language,
                 subject,
                 collection,
-                metadata.get("description", ""),
+                description,
                 f"https://archive.org/details/{identifier}",
                 json.dumps(metadata),
                 datetime.now()
