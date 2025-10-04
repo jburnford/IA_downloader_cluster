@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Downloaded PDFs and results
+pdfs/
+*.pdf
+results/
+exports/
+
+# OCR outputs
+*.jsonl
+output_*.jsonl
+
+# Progress and checkpoint files
+download_progress.json
+file_checksums.json
+*.log
+
+# SLURM outputs
+*.out
+*.err
+slurm-*.out
+
+# Configuration (may contain sensitive paths)
+config.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+
+# Other git repositories
+olmOCR_results/
+
+# Keep examples
+!config.env.example
+!*_example.*
