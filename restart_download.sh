@@ -39,6 +39,12 @@ if [ -f "$PROGRESS_FILE" ]; then
     pdf_count=$(find "$PDF_DIR" -name "*.pdf" | wc -l)
     echo "Current PDF count: $pdf_count"
 
+    # Activate virtual environment for Python script
+    VENV_DIR="${VENV_DIR:-$PROJECT_DIR/venv}"
+    if [ -d "$VENV_DIR" ]; then
+        source "$VENV_DIR/bin/activate"
+    fi
+
     python3 - "$PROGRESS_FILE" "$TARGET_QUERY" <<'PY'
 import json
 import sys

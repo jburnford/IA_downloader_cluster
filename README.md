@@ -15,44 +15,52 @@ Bulk download tools for retrieving PDFs from the Internet Archive, optimized for
 
 ## Quick Start
 
-### Installation
+### Installation (Cluster with SLURM)
 
-1. Clone the repository to your cluster:
+**IMPORTANT:** This setup is designed for HPC clusters with batch job systems. Run setup on a login node with internet access.
+
+1. Clone the repository:
 ```bash
 cd /home/jic823/projects/def-jic823/
 git clone <repository-url> InternetArchive
 cd InternetArchive
 ```
 
-2. Install Python dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-3. Configure for your environment:
+2. Configure for your cluster:
 ```bash
 cp config.env.example config.env
-# Edit config.env with your paths and settings
 nano config.env
+# IMPORTANT: Set PYTHON_MODULE for your cluster (e.g., "python/3.11" or "StdEnv/2023 python/3.11")
+# Use "module avail python" to find available modules
 ```
+
+3. Run setup script (creates virtual environment and installs dependencies):
+```bash
+chmod +x setup_venv.sh
+./setup_venv.sh
+```
+
+**See [INSTALLATION.md](INSTALLATION.md) for complete setup instructions.**
 
 ### Basic Usage
 
 #### Option 1: Python-based Downloader (Recommended)
 
-**Local testing:**
+**Submit SLURM job (recommended):**
 ```bash
+sbatch run_archive_download.sh
+```
+
+**Local testing (login node only):**
+```bash
+source venv/bin/activate
 python3 archive_cluster_downloader.py \
     --download-dir ./pdfs \
     --subject "India -- Gazetteers" \
     --start-year 1815 \
     --end-year 1960 \
     --max-items 10
-```
-
-**Submit SLURM job:**
-```bash
-sbatch run_archive_download.sh
+deactivate
 ```
 
 **Monitor progress:**
@@ -89,9 +97,14 @@ The `config.env` file centralizes all configuration:
 # Paths
 PDF_DIR="/home/jic823/projects/def-jic823/pdf"
 PROJECT_DIR="/home/jic823/projects/def-jic823/InternetArchive"
+VENV_DIR="$PROJECT_DIR/venv"
+
+# Python module (CRITICAL for cluster environments!)
+# Check available modules: module avail python
+PYTHON_MODULE="StdEnv/2023 python/3.11"  # Adjust for your cluster
 
 # SLURM settings
-SLURM_EMAIL="your-email@institution.edu"
+SLURM_EMAIL="jic823@usask.ca"
 SLURM_TIME="48:00:00"
 SLURM_MEM="16G"
 SLURM_CPUS="4"

@@ -16,7 +16,7 @@ fi
 #SBATCH --output=${PDF_DIR:-/home/jic823/projects/def-jic823/pdf}/archive_download_%j.out
 #SBATCH --error=${PDF_DIR:-/home/jic823/projects/def-jic823/pdf}/archive_download_%j.err
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=${SLURM_EMAIL:-jic823@uwo.ca}
+#SBATCH --mail-user=${SLURM_EMAIL:-jic823@usask.ca}
 
 # Set up environment
 export PYTHONUNBUFFERED=1
@@ -31,6 +31,7 @@ SUBJECT="${SUBJECT:-India -- Gazetteers}"
 START_YEAR="${START_YEAR:-1815}"
 END_YEAR="${END_YEAR:-1960}"
 SORT_ORDER="${SORT_ORDER:-date desc}"
+VENV_DIR="${VENV_DIR:-$PROJECT_DIR/venv}"
 
 # Navigate to the PDF directory
 cd "$PDF_DIR" || {
@@ -38,8 +39,28 @@ cd "$PDF_DIR" || {
     exit 1
 }
 
-# Load python module if needed (uncomment and adjust for your cluster)
-# module load python/3.9
+# Load Python module if specified in config (adjust for your cluster)
+# Examples: python/3.9, python/3.11, StdEnv/2023
+if [ -n "${PYTHON_MODULE}" ]; then
+    echo "Loading Python module: $PYTHON_MODULE"
+    module load $PYTHON_MODULE || {
+        echo "ERROR: Failed to load module '$PYTHON_MODULE'"
+        exit 1
+    }
+fi
+
+# Activate virtual environment
+if [ ! -d "$VENV_DIR" ]; then
+    echo "ERROR: Virtual environment not found at: $VENV_DIR"
+    echo "Please run setup_venv.sh first from a login node"
+    exit 1
+fi
+
+echo "Activating virtual environment: $VENV_DIR"
+source "$VENV_DIR/bin/activate" || {
+    echo "ERROR: Failed to activate virtual environment"
+    exit 1
+}
 
 echo "Starting Archive.org download job at $(date)"
 echo "Target directory: $PDF_DIR"
