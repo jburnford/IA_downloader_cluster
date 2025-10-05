@@ -143,7 +143,6 @@ def ingest_ocr_results(
     for pdf in all_pdfs:
         pdf_id = pdf['id']
         filename = pdf['filename']
-        sha256 = pdf['sha256']
 
         # Check if we have OCR results for this file (always match by filename)
         if filename not in ocr_results:
