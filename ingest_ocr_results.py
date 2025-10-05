@@ -70,18 +70,20 @@ def load_ocr_file(filepath: Path) -> list:
     """Load OCR file (JSON or JSONL) and return all records."""
     records = []
     try:
-        with open(filepath, 'r') as f:
-            content = f.read().strip()
-
-            # Try to load as JSON first (single object)
-            if content.startswith('{'):
-                records.append(json.loads(content))
-            # Otherwise try JSONL (multiple lines)
-            else:
-                for line in content.split('\n'):
+        # Check file extension to determine format
+        if filepath.suffix == '.jsonl':
+            # JSONL: one JSON object per line
+            with open(filepath, 'r') as f:
+                for line in f:
                     line = line.strip()
                     if line:
                         records.append(json.loads(line))
+        else:
+            # JSON: single object
+            with open(filepath, 'r') as f:
+                content = f.read().strip()
+                if content:
+                    records.append(json.loads(content))
         return records
     except Exception as e:
         print(f"Error loading {filepath}: {e}")
