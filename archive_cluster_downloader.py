@@ -70,6 +70,9 @@ class ClusterArchiveDownloader:
         self.download_all_pdfs = download_all_pdfs
         self.subcollection = subcollection
 
+        # Setup logging FIRST (before database init)
+        self._setup_logging()
+
         # Database tracking
         self.db = None
         if DB_AVAILABLE and db_path:
@@ -90,9 +93,6 @@ class ClusterArchiveDownloader:
         # Signal handling for graceful shutdown
         signal.signal(signal.SIGTERM, self._signal_handler)
         signal.signal(signal.SIGINT, self._signal_handler)
-
-        # Setup logging
-        self._setup_logging()
 
     def _setup_logging(self):
         """Setup logging for cluster environment."""
