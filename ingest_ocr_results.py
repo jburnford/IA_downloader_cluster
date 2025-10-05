@@ -153,7 +153,7 @@ def ingest_ocr_results(
 
         # Check current OCR status
         existing = db.conn.execute("""
-            SELECT id, status, json_output_path
+            SELECT id, status, json_output_path, ocr_data
             FROM ocr_processing
             WHERE pdf_file_id = ?
         """, (pdf_id,)).fetchone()
@@ -166,14 +166,19 @@ def ingest_ocr_results(
             continue
 
         if existing:
-            # Update existing record
-            if existing['status'] == 'completed' and existing['json_output_path'] == str(ocr_path):
+            # Update existing record if missing ocr_data or path changed
+            has_ocr_data = existing['ocr_data'] is not None
+            path_matches = existing['json_output_path'] == str(ocr_path)
+
+            if existing['status'] == 'completed' and path_matches and has_ocr_data:
                 skipped_count += 1
                 continue  # Already up to date
 
             print(f"  Updating: {filename}")
             print(f"    Old status: {existing['status']}")
             print(f"    OCR file: {ocr_path.name}")
+            if not has_ocr_data:
+                print(f"    Reason: Adding OCR data to existing record")
 
             if not dry_run:
                 # Store OCR data as JSON
