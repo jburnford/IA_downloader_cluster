@@ -9,13 +9,50 @@ Expected path structure: <pdf_directory>/results/results/<filename>.jsonl
 import argparse
 import json
 import sys
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 from archive_db import ArchiveDatabase
 
 
-def find_ocr_results(pdf_directory: Path, ocr_results_dir: Path = None, use_jsonl_parsing: bool = False) -> dict:
+def group_jsonl_records_by_pdf(json_file: Path) -> Tuple[Dict[str, List[Dict[str, object]]], List[Tuple[int, str]]]:
+    """Group JSONL records by their source PDF filename."""
+    grouped: Dict[str, List[Dict[str, object]]] = defaultdict(list)
+    issues: List[Tuple[int, str]] = []
+
+    with json_file.open('r', encoding='utf-8') as handle:
+        for line_no, raw in enumerate(handle, start=1):
+            line = raw.strip()
+            if not line:
+                continue
+
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:  # pragma: no cover - logged for operator awareness
+                issues.append((line_no, f"json decode error: {exc}"))
+                continue
+
+            metadata = record.get('metadata') or {}
+            source_value = (
+                metadata.get('Source-File')
+                or metadata.get('source_file')
+                or record.get('Source-File')
+                or record.get('source_file')
+            )
+
+            if not source_value:
+                issues.append((line_no, 'missing Source-File metadata'))
+                continue
+
+            pdf_name = Path(source_value).name
+            grouped[pdf_name].append(record)
+
+    return dict(grouped), issues
+
+
+def find_ocr_results(pdf_directory: Path, ocr_results_dir: Path = None, use_jsonl_parsing: bool = True) -> dict:
     """
     Find all OCR result files in the expected directory structure.
 
@@ -38,30 +75,41 @@ def find_ocr_results(pdf_directory: Path, ocr_results_dir: Path = None, use_json
         print(f"Warning: Results directory not found: {results_dir}")
         return {}
 
-    ocr_results = {}
+    ocr_results: Dict[str, Dict[str, object]] = {}
     # Handle both .json and .jsonl files
     for json_file in list(results_dir.glob("*.json")) + list(results_dir.glob("*.jsonl")):
-        if use_jsonl_parsing and json_file.suffix == ".jsonl":
-            # For NIBI: parse JSONL to extract PDF filename from first record
-            try:
-                with open(json_file, 'r') as f:
-                    first_line = f.readline().strip()
-                    if first_line:
-                        record = json.loads(first_line)
-                        # Extract PDF filename from metadata.Source-File
-                        meta = record.get('metadata', {})
-                        pdf_filename = meta.get('Source-File')
-                        if pdf_filename:
-                            # Extract just the filename (remove path if present)
-                            pdf_filename = Path(pdf_filename).name
-                            ocr_results[pdf_filename] = json_file
-            except Exception as e:
-                print(f"Warning: Could not parse {json_file.name}: {e}")
+        if json_file.suffix == ".jsonl" and use_jsonl_parsing:
+            grouped_records, issues = group_jsonl_records_by_pdf(json_file)
+
+            if issues:
+                issue_preview = ", ".join(f"line {line_no}: {msg}" for line_no, msg in issues[:3])
+                if len(issues) > 3:
+                    issue_preview += ", ..."
+                print(f"Warning: {json_file.name} had records without Source-File metadata ({issue_preview})")
+
+            if not grouped_records:
+                print(f"Warning: No parsable records found in {json_file.name}")
                 continue
+
+            for pdf_filename, records in grouped_records.items():
+                if pdf_filename in ocr_results:
+                    existing = ocr_results[pdf_filename]['path']  # type: ignore[index]
+                    print(
+                        "Warning: Duplicate OCR results for"
+                        f" {pdf_filename} (keeping {json_file.name}, seen {Path(existing).name})"
+                    )
+                ocr_results[pdf_filename] = {"path": json_file, "records": records}
         else:
-            # For local: <identifier>.json -> <identifier>.pdf
+            # For local single-file outputs: <identifier>.json(l) -> <identifier>.pdf
             pdf_filename = json_file.stem + ".pdf"
-            ocr_results[pdf_filename] = json_file
+            entry = {"path": json_file, "records": None}
+            if pdf_filename in ocr_results:
+                existing = ocr_results[pdf_filename]['path']  # type: ignore[index]
+                print(
+                    "Warning: Duplicate OCR results for"
+                    f" {pdf_filename} (keeping {json_file.name}, seen {Path(existing).name})"
+                )
+            ocr_results[pdf_filename] = entry
 
     return ocr_results
 
@@ -95,7 +143,7 @@ def ingest_ocr_results(
     pdf_directory: Path,
     ocr_results_dir: Path = None,
     subcollection: str = None,
-    use_jsonl_parsing: bool = False,
+    use_jsonl_parsing: bool = True,
     dry_run: bool = False
 ):
     """
@@ -118,7 +166,7 @@ def ingest_ocr_results(
 
     # Find OCR result files
     ocr_results = find_ocr_results(pdf_directory, ocr_results_dir, use_jsonl_parsing)
-    print(f"Found {len(ocr_results)} OCR result files")
+    print(f"Found {len(ocr_results)} OCR result file mappings")
     print()
 
     if not ocr_results:
@@ -142,6 +190,8 @@ def ingest_ocr_results(
     new_count = 0
     skipped_count = 0
 
+    used_results: set[str] = set()
+
     for pdf in all_pdfs:
         pdf_id = pdf['id']
         filename = pdf['filename']
@@ -149,7 +199,16 @@ def ingest_ocr_results(
         # Check if we have OCR results for this file (always match by filename)
         if filename not in ocr_results:
             continue
-        ocr_path = ocr_results[filename]
+        used_results.add(filename)
+
+        result_entry = ocr_results[filename]
+        ocr_path = Path(result_entry['path'])  # type: ignore[index]
+
+        # Lazily load OCR data for single-file JSON entries
+        ocr_data = result_entry.get('records')  # type: ignore[assignment]
+        if ocr_data is None:
+            ocr_data = load_ocr_file(ocr_path)
+            result_entry['records'] = ocr_data
 
         # Check current OCR status
         existing = db.conn.execute("""
@@ -159,7 +218,6 @@ def ingest_ocr_results(
         """, (pdf_id,)).fetchone()
 
         # Load OCR data to validate
-        ocr_data = load_ocr_file(ocr_path)
         if not ocr_data:
             print(f"  Skipping {filename} - could not load OCR data")
             skipped_count += 1
@@ -221,6 +279,15 @@ def ingest_ocr_results(
     print(f"  Updated records: {updated_count}")
     print(f"  Skipped (already current): {skipped_count}")
 
+    unused_results = sorted(set(ocr_results) - used_results)
+    if unused_results:
+        preview = ", ".join(unused_results[:10])
+        if len(unused_results) > 10:
+            preview += ", ..."
+        print()
+        print(f"Warning: {len(unused_results)} OCR result(s) had no matching PDF in the database")
+        print(f"  Examples: {preview}")
+
     if dry_run:
         print()
         print("This was a DRY RUN. No changes were made.")
@@ -252,9 +319,17 @@ def main():
     )
     parser.add_argument(
         "--parse-jsonl",
+        dest="parse_jsonl",
         action="store_true",
-        help="Parse JSONL files to extract PDF filenames from metadata (for NIBI output_*.jsonl files)"
+        help="(Deprecated) Explicitly enable JSONL parsing (on by default)"
     )
+    parser.add_argument(
+        "--no-parse-jsonl",
+        dest="parse_jsonl",
+        action="store_false",
+        help="Disable JSONL parsing and fall back to filename-based matching"
+    )
+    parser.set_defaults(parse_jsonl=True)
     parser.add_argument(
         "--dry-run",
         action="store_true",
