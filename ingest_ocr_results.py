@@ -176,13 +176,16 @@ def ingest_ocr_results(
             print(f"    OCR file: {ocr_path.name}")
 
             if not dry_run:
+                # Store OCR data as JSON
+                ocr_json = json.dumps(ocr_data)
                 db.conn.execute("""
                     UPDATE ocr_processing
                     SET status = 'completed',
                         json_output_path = ?,
-                        completed_date = ?
+                        completed_date = ?,
+                        ocr_data = ?
                     WHERE pdf_file_id = ?
-                """, (str(ocr_path), datetime.now(), pdf_id))
+                """, (str(ocr_path), datetime.now(), ocr_json, pdf_id))
 
             updated_count += 1
         else:
@@ -192,12 +195,14 @@ def ingest_ocr_results(
             print(f"    Records: {len(ocr_data)}")
 
             if not dry_run:
+                # Store OCR data as JSON
+                ocr_json = json.dumps(ocr_data)
                 db.conn.execute("""
                     INSERT INTO ocr_processing (
                         pdf_file_id, status, json_output_path,
-                        started_date, completed_date, ocr_engine
-                    ) VALUES (?, 'completed', ?, ?, ?, 'olmOCR')
-                """, (pdf_id, str(ocr_path), datetime.now(), datetime.now()))
+                        started_date, completed_date, ocr_engine, ocr_data
+                    ) VALUES (?, 'completed', ?, ?, ?, 'olmOCR', ?)
+                """, (pdf_id, str(ocr_path), datetime.now(), datetime.now(), ocr_json))
 
             new_count += 1
 
